@@ -8,12 +8,39 @@ import time
 import torchvision.transforms as transforms
 import torch.optim as optim
 import numpy as np
-from core_functions.utils import load_data, initial_weights, feature_mapping, empirical_loss, matplotlib_imshow
+from core_functions.utils import test_in_batch, load_data, initial_weights, feature_mapping, empirical_loss, matplotlib_imshow
 
 #device = torch.device("cpu")
 device = torch.device("cuda:0") # Uncomment this to run on GPU
 
-def test_in_batch(testloader, spectral_measure, stationary, W, loss_type, lambda_A, lambda_B, regular_type):
+def initial_weights(d, D, K, bp = True, std1 = 0.05, std2 = 0.05, stationary=False, device = 'cuda:0', dtype = torch.float):
+    m = Uniform(torch.tensor([0.0], device=device), torch.tensor([2*math.pi], device=device))
+    if stationary:
+        b1 = m.sample((1, D)).view(-1, D).to(device)
+        Omega1 = torch.empty(d, D, device = device, requires_grad=bp)
+        torch.nn.init.normal_(Omega1, 0, std1)
+        W = torch.randn(D, K, device=device, dtype=dtype, requires_grad=True)
+        return [Omega1, b1], W
+    else:
+        Omega1 = torch.empty(d, D, device = device, requires_grad=bp)
+        Omega2 = torch.empty(d, D, device = device, requires_grad=bp)
+        b1 = m.sample((1, D)).view(-1, D).to(device)
+        b2 = m.sample((1, D)).view(-1, D).to(device)
+        torch.nn.init.normal_(Omega1, 0, std1)
+        torch.nn.init.normal_(Omega2, 0, std2)
+        W = torch.randn(D, K, device=device, dtype=dtype, requires_grad=True)
+        return [Omega1, Omega2, b1, b2], W
+
+def feature_mapping(X, parameters, stationary):    
+    if stationary :
+        Omega1, b1 = parameters
+        phi = torch.cos(X.mm(Omega1) + b1.repeat(X.shape[0], 1))*math.sqrt(2/Omega1.shape[1])
+    else:
+        Omega1, Omega2, b1, b2 = parameters
+        phi = (torch.cos(X.mm(Omega1) + b1.repeat(X.shape[0], 1)) + torch.cos(X.mm(Omega2) + b2.repeat(X.shape[0], 1)))/math.sqrt(2*Omega1.shape[1])
+    return phi
+
+def test_in_batch(testloader, spectral_measure, stationary, W, loss_type, lambda_A, lambda_B, regular_type, device="cuda:0"):
     total = 0
     loss = 0.0
     regularaztion_W = 0.0
@@ -52,7 +79,6 @@ def test_in_batch(testloader, spectral_measure, stationary, W, loss_type, lambda
                 total += 1
 
         return  loss.item()/(i_batch + 1), regularaztion_W.item()/(i_batch + 1), regularaztion_phi.item()/(i_batch + 1), correct / total
-    
 
 def askl(parameter_dic):
     dataset = parameter_dic['dataset']
@@ -83,7 +109,6 @@ def askl(parameter_dic):
     # Initial spectral_measure
     spectral_measure, W  = initial_weights(d, D, K, back_propagation, std1, std2, stationary, device)
 
-
     # Define optimizer
     #optimizer = optim.SGD((spectral_measure[0], spectral_measure[1], W), lr=0.0001, momentum=0.9)
     if stationary :
@@ -109,7 +134,7 @@ def askl(parameter_dic):
             phi = feature_mapping(X_train, spectral_measure, stationary)
             y_pred = phi.mm(W)
             
-            #Forward : calculate objective
+            # Forward : calculate objective
             loss = empirical_loss(y_pred, y_train, loss_type)
             if regular_type == 'fro':
                 regularaztion_W = lambda_A * torch.norm(W, 'fro')
@@ -131,7 +156,7 @@ def askl(parameter_dic):
                 training_loss, training_regularaztion_W, training_regularaztion_phi = [0.0, 0.0, 0.0]
 
                 if parameter_dic['validate']:
-                    validate_loss, validate_regularaztion_W, validate_regularaztion_phi, validate_accuracy = test_in_batch(validateloader, spectral_measure, stationary, W, loss_type, lambda_A, lambda_B, regular_type)
+                    validate_loss, validate_regularaztion_W, validate_regularaztion_phi, validate_accuracy = test_in_batch(validateloader, spectral_measure, stationary, W, loss_type, lambda_A, lambda_B, regular_type, device)
                     validate_loss_records.append(validate_loss) 
                     validate_regularaztion_W_records.append(validate_regularaztion_W)
                     validate_regularaztion_phi_records.append(validate_regularaztion_phi) 
@@ -139,6 +164,7 @@ def askl(parameter_dic):
                     print('[%d, %5d] loss: %.3f, accuracy: %.3f%%' % (epoch + 1, i_batch + 1, validate_loss, validate_accuracy))
                 else:
                     print('[%d, %5d] loss: %.3f%%' % (epoch + 1, i_batch + 1, training_loss))
+
             # Backward
             objective.backward()
             if regular_type != 'fro':
@@ -165,7 +191,6 @@ def askl(parameter_dic):
         'parameter_dic' : parameter_dic,
         # 'spectral_measure' : spectral_measure,
         # 'W' : W,
-
         'training_objective_records' : [training_loss_records[i] + training_regularaztion_W_records[i] + training_regularaztion_phi_records[i] for i in range(len(training_loss_records))],      
         'training_loss_records' : training_loss_records,
         'training_regularaztion_W_records' : training_regularaztion_W_records,

@@ -85,34 +85,6 @@ def load_data(data_name, batch_size):
         class_size = len(set(trainset.dataset.outputs))
         return trainloader, testloader, testloader, feature_size, 1 if is_regression(data_name) else class_size
 
-
-def initial_weights(d, D, K, bp = True, std1 = 0.05, std2 = 0.05, stationary=False, device = 'cuda:0', dtype = torch.float):
-    m = Uniform(torch.tensor([0.0], device=device), torch.tensor([2*math.pi], device=device))
-    if stationary:
-        b1 = m.sample((1, D)).view(-1, D).to(device)
-        Omega1 = torch.empty(d, D, device = device, requires_grad=bp)
-        torch.nn.init.normal_(Omega1, 0, std1)
-        W = torch.randn(D, K, device=device, dtype=dtype, requires_grad=True)
-        return [Omega1, b1], W
-    else:
-        Omega1 = torch.empty(d, D, device = device, requires_grad=bp)
-        Omega2 = torch.empty(d, D, device = device, requires_grad=bp)
-        b1 = m.sample((1, D)).view(-1, D).to(device)
-        b2 = m.sample((1, D)).view(-1, D).to(device)
-        torch.nn.init.normal_(Omega1, 0, std1)
-        torch.nn.init.normal_(Omega2, 0, std2)
-        W = torch.randn(D, K, device=device, dtype=dtype, requires_grad=True)
-        return [Omega1, Omega2, b1, b2], W
-
-def feature_mapping(X, parameters, stationary):    
-    if stationary :
-        Omega1, b1 = parameters
-        phi = torch.cos(X.mm(Omega1) + b1.repeat(X.shape[0], 1))*math.sqrt(2/Omega1.shape[1])
-    else:
-        Omega1, Omega2, b1, b2 = parameters
-        phi = (torch.cos(X.mm(Omega1) + b1.repeat(X.shape[0], 1)) + torch.cos(X.mm(Omega2) + b2.repeat(X.shape[0], 1)))/math.sqrt(2*Omega1.shape[1])
-    return phi
-
 def empirical_loss(y_pred, y, loss_type):
     if loss_type == 'mse':
         criterion = torch.nn.MSELoss()
