@@ -14,7 +14,7 @@ def is_regression(dataest):
         return True
 
 class svmlight_data(Dataset):
-    def __init__(self, data_name, root_dir='D:/Datasets/', transform=None, target_transform=None):
+    def __init__(self, data_name, root_dir='./datasets/', transform=None, target_transform=None):
         self.inputs, self.outputs = load_svmlight_file(root_dir + data_name)
         if len(set(self.outputs))  > 2 and self.outputs.min() > 0:
             self.outputs -= self.outputs.min()

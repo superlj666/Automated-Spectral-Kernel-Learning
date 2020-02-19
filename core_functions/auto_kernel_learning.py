@@ -8,7 +8,8 @@ import time
 import torchvision.transforms as transforms
 import torch.optim as optim
 import numpy as np
-from core_functions.utils import test_in_batch, load_data, initial_weights, feature_mapping, empirical_loss, matplotlib_imshow
+from core_functions.utils import load_data, empirical_loss, matplotlib_imshow
+from torch.distributions.uniform import Uniform
 
 #device = torch.device("cpu")
 device = torch.device("cuda:0") # Uncomment this to run on GPU
